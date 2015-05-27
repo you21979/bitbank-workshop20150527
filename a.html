@@ -1,0 +1,65 @@
+<html>
+<body>
+<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.4.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
+<script type="text/javascript" src="./btc.js"></script>
+<script>
+$(document).ready(function(){
+    //var key = bitcoin.ECKey.makeRandom();
+    //var sec = key.toWIF()
+    var sec = 'KwUpzUUekg5rYvMehTtMHytktc4oz3bnWXb2FJLZjGRMd2LntScR';
+    var key = bitcoin.ECKey.fromWIF(sec);
+    var address = key.pub.getAddress(bitcoin.networks.testnet).toString();
+    $('#qrcode').qrcode({
+        width:300,
+        height:300,
+        text:address
+    });
+    $('#address').text(address)
+    jQuery.getJSON(["http://tbtc.blockr.io/api/v1/address/balance", address+ "?unconfirmed=1"].join('/'),
+	{},
+        function(json){
+            $("#balance").text(JSON.stringify(json));
+            jQuery.getJSON(["http://tbtc.blockr.io/api/v1/address/unspent", address+ "?unconfirmed=1"].join('/'),
+	        {},
+                function(res){
+                    $("#utxo").text(JSON.stringify(res));
+                    var tx = new bitcoin.TransactionBuilder();
+                    if(res.data.unspent.length >= 1){
+                        var amount = 0;
+                        var memo = {};
+                        res.data.unspent.forEach(function(v){
+                            if(memo[v.tx]) return;
+                            amount += (v.amount * 1e8);
+                            tx.addInput(v.tx, v.n);
+                            memo[v.tx] = 1;
+                        })
+                        tx.addOutput('movAN3YdWurQqzpQ6mGYkr9wa9LFD7YhB1', amount - 10000);
+                        var n = 0;
+                        tx.inputs.forEach(function(v){
+                            tx.sign(n++, key)
+                        })
+                        $("#tx").text(tx.build().toHex());
+                        jQuery.post(
+                            "http://tbtc.blockr.io/api/v1/tx/push",
+                            {hex:tx.build().toHex()},
+                            function(r){
+                                $("#res").text(r.data);
+                            },
+                            "json"
+                        )
+                    }
+                }
+            )
+        }
+    )
+});
+</script>
+<div id="qrcode"></div>
+<div id="address"></div>
+<div id="balance"></div>
+<div id="utxo"></div>
+<div id="tx"></div>
+<div id="res"></div>
+</body>
+</html>
